@@ -1,4 +1,6 @@
-node_modules/
-.env
 dist/
-server/credentials/google-calendar.json
+server/credentials/
+*.json
+**/credentials/**
+.env
+.env.local
