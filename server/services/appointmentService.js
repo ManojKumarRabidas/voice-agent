@@ -1,58 +1,127 @@
-import {
-  bookAppointment,
-  cancelAppointment,
-  listAppointments,
-} from './calendarService.js'
+import Appointment from '../models/appointmentModel.js';
+import { createGoogleEvent } from './calendarService.js';
+import { getAvailableSlots } from '../utils/slotUtils.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Map doctor identifiers to their respective Google Calendar IDs
-const calendarIds = {
-  jason: '03d2d5cd12415b08357ec9293d7fb5f6acfd37e79c12a8a6d1071e4fcc52654d@group.calendar.google.com',
-  elizabeth: '916fa54fc623e06e876d138ec7edb2be7861f3bc1813e57893fc905f446136f7@group.calendar.google.com',
-}
+const CALENDAR_IDS = {
+  'jason': process.env.JASON_CALENDAR_ID,
+  'elizabeth': process.env.ELIZABETH_CALENDAR_ID,
+};
 
-// Core handler function
-export async function handleAppointmentIntent(parsed) {
-  const { intent, doctorId, dateTime, name, age, phone, eventId } = parsed
-  const calendarId = calendarIds[doctorId]
+export async function handleAppointmentIntent(data) {
+  try {
+    console.log("data", data)
+    if (!data || !data.intent) {
+      return 'Invalid data or intent missing';
+    }
+  const {
+    intent,
+    treatment,
+    dateTime,
+    name,
+    age,
+    phone,
+    doctorId,
+    eventId,
+  } = data;
 
-  if (!calendarId) {
-    return "Invalid doctor ID. Please choose between 'jason' or 'elizabeth'."
-  }
+  const doctor = doctorId || 'jason';
+  const calendarId = CALENDAR_IDS[doctor];
+  console.log("calendarId", calendarId)
+  console.log("doctorId", doctorId)
+  console.log("doctor", doctor)
+
+  if (!intent) throw new Error('Intent missing from Gemini response');
 
   switch (intent) {
-    case 'book':
-      if (!name || !age || !phone || !dateTime) {
-        return 'Missing required booking information.'
-      }
+    case 'book': {
+      const appointmentDateTime = new Date(dateTime);
+      const endTime = new Date(appointmentDateTime.getTime() + 30 * 60 * 1000);
 
-      const event = await bookAppointment({
-        summary: `Appointment for ${name}, Age ${age}, Phone ${phone}`,
-        dateTime,
+      const googleEventId = await createGoogleEvent({
+        summary: `${treatment} Appointment for ${name}`,
+        start: appointmentDateTime,
+        end: endTime,
         calendarId,
-      })
+      });
 
-      return `✅ Appointment booked successfully for ${name} at ${dateTime}. Ref: ${event.id}`
+      const userDoc = await Appointment.create({
+        patientName: name,
+        patientAge: age,
+        patientPhone: phone,
+        doctor,
+        treatment,
+        appointmentDateTime,
+        status: 'Scheduled',
+        eventId: googleEventId,
+      });
+      console.log("userDoc", userDoc)
+      return `Appointment booked with Dr. ${doctor} on ${appointmentDateTime.toLocaleString()}`;
+    }
 
-    case 'cancel':
-      if (!eventId) return 'Missing event ID to cancel.'
-      await cancelAppointment({ calendarId, eventId })
-      return `🗑️ Appointment cancelled successfully.`
+    case 'reschedule': {
+      if (!eventId) throw new Error('eventId is required to reschedule');
 
-    case 'reschedule':
-      if (!eventId || !dateTime) return 'Missing data to reschedule.'
-      await cancelAppointment({ calendarId, eventId })
-      const newEvent = await bookAppointment({
-        summary: `Rescheduled: ${name}, Age ${age}, Phone ${phone}`,
-        dateTime,
+      const newDateTime = new Date(dateTime);
+      const newEndTime = new Date(newDateTime.getTime() + 30 * 60 * 1000);
+
+      await createGoogleEvent({
+        summary: `Rescheduled Appointment for ${name}`,
+        start: newDateTime,
+        end: newEndTime,
         calendarId,
-      })
-      return `📅 Appointment rescheduled. Ref: ${newEvent.id}`
+        eventId,
+        update: true,
+      });
 
-    case 'list':
-      const events = await listAppointments({ calendarId })
-      return events
+      await Appointment.findOneAndUpdate(
+        { eventId },
+        {
+          appointmentDateTime: newDateTime,
+          status: 'Rescheduled',
+        }
+      );
+
+      return `Appointment rescheduled to ${newDateTime.toLocaleString()}`;
+    }
+
+    case 'cancel': {
+      if (!eventId) throw new Error('eventId is required to cancel');
+
+      await createGoogleEvent({
+        calendarId,
+        eventId,
+        cancel: true,
+      });
+
+      await Appointment.findOneAndUpdate(
+        { eventId },
+        {
+          status: 'Cancelled',
+        }
+      );
+
+      return `Appointment cancelled successfully.`;
+    }
 
     default:
-      return '❌ Invalid appointment action.'
+      return `Sorry, I couldn't understand your request.`;
+  }
+} catch(err){
+    console.error('Error handling appointment intent:', err.message);
+    return `An error occurred while processing your request: ${err.message}`;
+  }
+}
+
+
+export async function fetchAvailableSlots({ doctor, preferredDate, preferredTime }) {
+  try {
+    const calendarId = CALENDAR_IDS[doctor];
+    const slots = await getAvailableSlots({ doctor: { calendarId }, preferredDate, preferredTime });
+    return slots.map(slot => slot.toLocaleString());
+  } catch (error) {
+    console.error('Error fetching available slots:', error);
+    throw error;
   }
 }

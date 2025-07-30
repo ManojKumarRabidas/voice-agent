@@ -1,3 +1,4 @@
+
 import { google } from 'googleapis';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,37 +11,53 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/calendar'],
 });
 
-export async function bookAppointment({ summary, dateTime, calendarId }) {
+export async function createGoogleEvent({
+  summary,
+  description = '',
+  start,
+  end,
+  calendarId,
+  eventId,
+  update = false,
+  cancel = false,
+}) {
   const authClient = await auth.getClient();
+
+  if (cancel) {
+    if (!eventId) throw new Error('eventId is required for cancellation');
+    await calendar.events.delete({
+      auth: authClient,
+      calendarId,
+      eventId,
+    });
+    return true;
+  }
 
   const event = {
     summary,
-    start: { dateTime, timeZone: 'America/New_York' },
-    end: {
-      dateTime: new Date(new Date(dateTime).getTime() + 30 * 60 * 1000).toISOString(),
-      timeZone: 'America/New_York',
-    },
+    description,
+    start: { dateTime: new Date(start).toISOString(), timeZone: 'America/New_York' },
+    end: { dateTime: new Date(end).toISOString(), timeZone: 'America/New_York' },
   };
 
+  if (update) {
+    if (!eventId) throw new Error('eventId is required for update');
+    const response = await calendar.events.update({
+      auth: authClient,
+      calendarId,
+      eventId,
+      requestBody: event,
+    });
+    return response.data.id;
+  }
+
+  // Create new event
   const response = await calendar.events.insert({
     auth: authClient,
     calendarId,
     requestBody: event,
   });
-
-  return response.data;
-}
-
-export async function cancelAppointment({ calendarId, eventId }) {
-  const authClient = await auth.getClient();
-
-  await calendar.events.delete({
-    auth: authClient,
-    calendarId,
-    eventId,
-  });
-
-  return true;
+  return response.data.id;
 }
 
 export async function listAppointments({ calendarId }) {

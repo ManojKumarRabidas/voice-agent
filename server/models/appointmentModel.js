@@ -15,7 +15,6 @@ const appointmentSchema = new mongoose.Schema({
   },
   doctor: {
     type: String,
-    enum: ['Jason P. Matthew', 'Elizabeth Sorkin'],
     required: true,
   },
   treatment: {
