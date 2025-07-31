@@ -21,6 +21,10 @@ const appointmentSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  eventId: {
+    type: String,
+    required: true,
+  },
   appointmentDateTime: {
     type: Date,
     required: true,

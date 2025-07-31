@@ -1,10 +1,12 @@
 import Appointment from '../models/appointmentModel.js';
-import CallLog from '../models/callLogModel.js'; // Optional
+import ChatHistory from '../models/chatHistoryModel.js';
 
 export const getStats = async (req, res) => {
   try {
-    const totalAppointments = await Appointment.countDocuments();
-    const totalCalls = await CallLog?.countDocuments?.() || 0;
+    const totalAppointments = await Appointment.countDocuments({
+  status: { $in: ["Scheduled", "Rescheduled"] }
+});
+    const totalCalls = await ChatHistory?.countDocuments?.() || 0;
 
     res.json({ totalAppointments, totalCalls });
   } catch (error) {

@@ -4,9 +4,6 @@ const CLINIC_START_HOUR = 9;
 const CLINIC_END_HOUR = 18;
 const SLOT_DURATION_MINUTES = 30;
 
-/**
- * Generates possible 30-minute slots within clinic hours for a given day
- */
 function generateDaySlots(date) {
   const slots = [];
   const start = new Date(date.setHours(CLINIC_START_HOUR, 0, 0, 0));
@@ -21,28 +18,18 @@ function generateDaySlots(date) {
   return slots;
 }
 
-/**
- * Filters out already booked slots
- */
 function filterOccupiedSlots(allSlots, bookedEvents) {
   const bookedTimes = bookedEvents.map(event => new Date(event.start.dateTime).toISOString());
 
   return allSlots.filter(slot => !bookedTimes.includes(slot.toISOString()));
 }
 
-/**
- * Main function to get next N free slots for a doctor
- */
 export async function getAvailableSlots({ doctor, preferredDate, preferredTime }) {
   const calendarId = doctor.calendarId;
   const date = preferredDate ? new Date(preferredDate) : new Date();
-
-  // Load existing appointments
   const bookedEvents = await listAppointments({ calendarId });
-
   // Generate all potential slots for the day
   const allSlots = generateDaySlots(date);
-
   // Filter out occupied ones
   const availableSlots = filterOccupiedSlots(allSlots, bookedEvents);
 
