@@ -34,7 +34,10 @@ export async function handleAppointment(extractedJson) {
       case 'book':
         const appointmentDateTime = new Date(dateTime);
         const endTime = new Date(appointmentDateTime.getTime() + 30 * 60 * 1000);
-        const googleEventId = await createGoogleEvent({summary: `${treatment} Appointment for ${name}`, start: appointmentDateTime, end: endTime, calendarId});
+        const result = await createGoogleEvent({summary: `${treatment} Appointment for ${name}`, description: "", start: appointmentDateTime, end: endTime, calendarId});
+        if(result.status === false) {return { success: false, error: result.msg }}
+        const googleEventId = result.eventId;
+        if (!googleEventId) {return { success: false, error: 'Failed to create Google Calendar event'}}
         const userDoc = await Appointment.create({patientName: name, patientAge: age, patientPhone: phone, doctor, treatment, appointmentDateTime, status: 'Scheduled', eventId: googleEventId});
        
         console.log("googleEventId", googleEventId);
